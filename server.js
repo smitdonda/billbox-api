@@ -1,0 +1,73 @@
+#!/usr/bin/env node
+
+const http = require("http");
+
+const app = require("./src/app");
+const env = require("./src/config/env");
+const { connectDatabase } = require("./src/config/database");
+
+/*
+ * The long-running entry point. On Vercel nothing runs this file: the platform
+ * imports src/app.js and calls it per request, which is why the express app and
+ * the server that listens with it are separate modules.
+ */
+
+/** A port number, a named pipe, or false when the value makes no sense. */
+const normalizePort = (value) => {
+  const parsed = parseInt(value, 10);
+  if (Number.isNaN(parsed)) return value; // named pipe
+  return parsed >= 0 ? parsed : false;
+};
+
+const port = normalizePort(env.port);
+app.set("port", port);
+
+const server = http.createServer(app);
+
+const onError = (error) => {
+  if (error.syscall !== "listen") throw error;
+
+  const bind = typeof port === "string" ? `Pipe ${port}` : `Port ${port}`;
+
+  switch (error.code) {
+    case "EACCES":
+      console.error(`${bind} requires elevated privileges`);
+      process.exit(1);
+      break;
+    case "EADDRINUSE":
+      console.error(`${bind} is already in use`);
+      process.exit(1);
+      break;
+    default:
+      throw error;
+  }
+};
+
+const onListening = () => {
+  const address = server.address();
+  const bind =
+    typeof address === "string" ? `pipe ${address}` : `port ${address.port}`;
+  console.log(`Listening on ${bind}`);
+};
+
+/*
+ * A long-running server has no reason to accept traffic it cannot serve, so
+ * the database connection is proved before the socket opens.
+ */
+connectDatabase()
+  .then(() => {
+    console.log("****************************");
+    console.log("*    Starting Server");
+    console.log(`*    Port: ${port}`);
+    console.log("*    Database: MongoDB");
+    console.log("*    DB Connection: OK");
+    console.log("****************************");
+
+    server.listen(port);
+    server.on("error", onError);
+    server.on("listening", onListening);
+  })
+  .catch((error) => {
+    console.error(`Could not connect to MongoDB: ${error.message}`);
+    process.exit(1);
+  });

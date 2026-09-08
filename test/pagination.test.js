@@ -9,7 +9,7 @@ const {
   pageMeta,
   searchFilter,
   parseSort,
-} = require("../utils/pagination");
+} = require("../src/utils/pagination");
 
 test("parsePaging defaults to the first page", () => {
   assert.deepEqual(parsePaging({}), {

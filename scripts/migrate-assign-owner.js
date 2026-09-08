@@ -13,12 +13,12 @@
  */
 const { run } = require("./_lib");
 
-const User = require("../models/users");
-const Product = require("../models/products");
-const Customer = require("../models/customers");
-const BillInfo = require("../models/BilIInfo");
-const MyProfile = require("../models/myprofile");
-const Counter = require("../models/counter");
+const User = require("../src/models/User");
+const Product = require("../src/models/Product");
+const Customer = require("../src/models/Customer");
+const BillInfo = require("../src/models/BillInfo");
+const Profile = require("../src/models/Profile");
+const Counter = require("../src/models/Counter");
 
 const OWNED = [
   ["products", Product, "Product"],
@@ -56,13 +56,13 @@ run("2026-09-assign-owner", async (connection) => {
    * document, only the first can be kept — the rest were unreachable anyway,
    * since the app has only ever read profile[0].
    */
-  const profiles = await MyProfile.collection
+  const profiles = await Profile.collection
     .find({ user: { $exists: false } })
     .sort({ _id: 1 })
     .toArray();
 
   if (profiles.length) {
-    await MyProfile.collection.updateOne(
+    await Profile.collection.updateOne(
       { _id: profiles[0]._id },
       { $set: { user: owner._id } }
     );
@@ -149,7 +149,7 @@ run("2026-09-assign-owner", async (connection) => {
         `--force to finish.`
     );
   } else {
-    models.push(MyProfile);
+    models.push(Profile);
   }
 
   for (const Model of models) {

@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { priceLine, priceBill, stockDelta } = require("../utils/billing");
+const { priceLine, priceBill, stockDelta } = require("../src/utils/billing");
 
 /*
  * Every amount in these tests is in paise: ₹1,000.00 is 100000.

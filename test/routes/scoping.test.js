@@ -46,7 +46,7 @@ async function seedAlice() {
 
   const customer = (
     await alice
-      .post("/customers")
+      .post("/api/customers")
       .send({
         name: "Alice Customer",
         email: "cust@example.com",
@@ -58,7 +58,7 @@ async function seedAlice() {
 
   const bill = (
     await alice
-      .post("/billInformation")
+      .post("/api/bills")
       .send({
         name: "Alice Customer",
         email: "cust@example.com",
@@ -67,13 +67,13 @@ async function seedAlice() {
         products: [lineFor(product, 2)],
       })
       .expect(201)
-  ).body.billinfo;
+  ).body.data;
 
   const profile = (
     await alice
-      .post("/my-profile")
+      .put("/api/profile")
       .send({ companyname: "Alice Trading", cemail: "hq@alice.example" })
-      .expect(201)
+      .expect(200)
   ).body.data;
 
   return { product, customer, bill, profile };
@@ -86,54 +86,54 @@ async function seedAlice() {
 test("one account's lists never contain another's records", async () => {
   await seedAlice();
 
-  for (const [path, key] of [
-    ["/products", "products"],
-    ["/customers", "customers"],
-    ["/billInformation", "billinfo"],
+  for (const [path, label] of [
+    ["/api/products", "products"],
+    ["/api/customers", "customers"],
+    ["/api/bills", "bills"],
   ]) {
     const mine = await alice.get(path).expect(200);
-    assert.equal(mine.body[key].length, 1, `alice should see her own ${key}`);
+    assert.equal(mine.body.data.length, 1, `alice should see her own ${label}`);
 
     const theirs = await bob.get(path).expect(200);
-    assert.deepEqual(theirs.body[key], [], `bob must not see alice's ${key}`);
+    assert.deepEqual(theirs.body.data, [], `bob must not see alice's ${label}`);
     assert.equal(theirs.body.meta.total, 0);
   }
 
-  const profile = await bob.get("/my-profile").expect(200);
-  assert.deepEqual(profile.body.profile, []);
+  const profile = await bob.get("/api/profile").expect(200);
+  assert.equal(profile.body.data, null);
 });
 
 test("fetching another account's bill by id is a 404, not a peek", async () => {
   const { bill } = await seedAlice();
 
-  await alice.get(`/billInformation/${bill._id}`).expect(200);
-  const res = await bob.get(`/billInformation/${bill._id}`).expect(404);
+  await alice.get(`/api/bills/${bill._id}`).expect(200);
+  const res = await bob.get(`/api/bills/${bill._id}`).expect(404);
   assert.match(res.body.message, /not found/i);
 });
 
 test("the dashboard counts only what the caller owns", async () => {
   await seedAlice();
 
-  const hers = await alice.get("/dashboard/summary").expect(200);
-  assert.equal(hers.body.counts.product, 1);
-  assert.equal(hers.body.counts.customer, 1);
-  assert.equal(hers.body.counts.billInformation, 1);
-  assert.ok(hers.body.billed > 0);
-  assert.ok(hers.body.stockValue > 0);
+  const hers = await alice.get("/api/dashboard/summary").expect(200);
+  assert.equal(hers.body.data.counts.product, 1);
+  assert.equal(hers.body.data.counts.customer, 1);
+  assert.equal(hers.body.data.counts.billInformation, 1);
+  assert.ok(hers.body.data.billed > 0);
+  assert.ok(hers.body.data.stockValue > 0);
 
-  const his = await bob.get("/dashboard/summary").expect(200);
-  assert.deepEqual(his.body.counts, {
+  const his = await bob.get("/api/dashboard/summary").expect(200);
+  assert.deepEqual(his.body.data.counts, {
     customer: 0,
     product: 0,
     billInformation: 0,
   });
-  assert.equal(his.body.billed, 0);
-  assert.equal(his.body.stockValue, 0);
-  assert.deepEqual(his.body.recentBills, []);
-  assert.deepEqual(his.body.chart, []);
+  assert.equal(his.body.data.billed, 0);
+  assert.equal(his.body.data.stockValue, 0);
+  assert.deepEqual(his.body.data.recentBills, []);
+  assert.deepEqual(his.body.data.chart, []);
 
-  const count = await bob.get("/dashboard/count").expect(200);
-  assert.equal(count.body.product, 0);
+  const count = await bob.get("/api/dashboard/count").expect(200);
+  assert.equal(count.body.data.product, 0);
 });
 
 /* ------------------------------------------------------------------ */
@@ -144,79 +144,89 @@ test("another account cannot edit or delete a product", async () => {
   const { product } = await seedAlice();
 
   await bob
-    .put(`/products/${product._id}`)
+    .put(`/api/products/${product._id}`)
     .send({ productname: "Stolen", unitprice: 1 })
     .expect(404);
 
-  await bob.delete(`/products/${product._id}`).expect(404);
+  await bob.delete(`/api/products/${product._id}`).expect(404);
 
-  const still = await alice.get("/products").expect(200);
-  assert.equal(still.body.products.length, 1);
-  assert.equal(still.body.products[0].productname, "Alice Widget");
-  assert.equal(still.body.products[0].unitprice, 50000);
+  const still = await alice.get("/api/products").expect(200);
+  assert.equal(still.body.data.length, 1);
+  assert.equal(still.body.data[0].productname, "Alice Widget");
+  assert.equal(still.body.data[0].unitprice, 50000);
 });
 
 test("another account cannot edit or delete a customer", async () => {
   const { customer } = await seedAlice();
 
   await bob
-    .put(`/customers/${customer._id}`)
+    .put(`/api/customers/${customer._id}`)
     .send({ name: "Stolen" })
     .expect(404);
-  await bob.delete(`/customers/${customer._id}`).expect(404);
+  await bob.delete(`/api/customers/${customer._id}`).expect(404);
 
-  const still = await alice.get("/customers").expect(200);
-  assert.equal(still.body.customers[0].name, "Alice Customer");
+  const still = await alice.get("/api/customers").expect(200);
+  assert.equal(still.body.data[0].name, "Alice Customer");
 });
 
 test("another account cannot edit or delete a bill", async () => {
   const { bill, product } = await seedAlice();
 
   await bob
-    .put(`/billInformation/${bill._id}`)
+    .put(`/api/bills/${bill._id}`)
     .send({ name: "Stolen", products: [lineFor(product, 1)] })
     .expect(404);
 
-  await bob.delete(`/billInformation/${bill._id}`).expect(404);
+  await bob.delete(`/api/bills/${bill._id}`).expect(404);
 
-  const still = await alice.get(`/billInformation/${bill._id}`).expect(200);
-  assert.equal(still.body.bill.name, "Alice Customer");
+  const still = await alice.get(`/api/bills/${bill._id}`).expect(200);
+  assert.equal(still.body.data.name, "Alice Customer");
 });
 
 test("another account cannot overwrite the company letterhead", async () => {
   const { profile } = await seedAlice();
 
-  await bob
-    .put(`/my-profile/${profile._id}`)
-    .send({ companyname: "Stolen Ltd" })
-    .expect(404);
+  /*
+   * The profile has no id in the URL any more, so "write someone else's" is
+   * not a request that can be phrased: bob's save is bob's own. What has to
+   * hold is that it leaves alice's letterhead exactly where it was.
+   */
+  await bob.put("/api/profile").send({ companyname: "Stolen Ltd" }).expect(200);
 
-  const still = await alice.get("/my-profile").expect(200);
-  assert.equal(still.body.profile[0].companyname, "Alice Trading");
+  const still = await alice.get("/api/profile").expect(200);
+  assert.equal(still.body.data._id, profile._id);
+  assert.equal(still.body.data.companyname, "Alice Trading");
 });
 
 test("each account gets its own company profile, not a shared one", async () => {
   await seedAlice();
 
   await bob
-    .post("/my-profile")
+    .put("/api/profile")
     .send({ companyname: "Bob Supplies" })
-    .expect(201);
+    .expect(200);
 
-  const hers = await alice.get("/my-profile").expect(200);
-  const his = await bob.get("/my-profile").expect(200);
+  const hers = await alice.get("/api/profile").expect(200);
+  const his = await bob.get("/api/profile").expect(200);
 
-  assert.equal(hers.body.profile[0].companyname, "Alice Trading");
-  assert.equal(his.body.profile[0].companyname, "Bob Supplies");
+  assert.equal(hers.body.data.companyname, "Alice Trading");
+  assert.equal(his.body.data.companyname, "Bob Supplies");
 });
 
-test("posting the profile twice updates the one document instead of adding another", async () => {
-  await alice.post("/my-profile").send({ companyname: "First" }).expect(201);
-  await alice.post("/my-profile").send({ companyname: "Second" }).expect(200);
+test("saving the profile twice updates the one document instead of adding another", async () => {
+  const first = await alice
+    .put("/api/profile")
+    .send({ companyname: "First" })
+    .expect(200);
+  const second = await alice
+    .put("/api/profile")
+    .send({ companyname: "Second" })
+    .expect(200);
 
-  const res = await alice.get("/my-profile").expect(200);
-  assert.equal(res.body.profile.length, 1);
-  assert.equal(res.body.profile[0].companyname, "Second");
+  assert.equal(second.body.data._id, first.body.data._id);
+
+  const res = await alice.get("/api/profile").expect(200);
+  assert.equal(res.body.data.companyname, "Second");
 });
 
 /* ------------------------------------------------------------------ */
@@ -226,22 +236,22 @@ test("posting the profile twice updates the one document instead of adding anoth
 test("a bill cannot consume stock belonging to another account", async () => {
   const { product } = await seedAlice();
 
-  const before = (await alice.get("/products").expect(200)).body.products[0]
+  const before = (await alice.get("/api/products").expect(200)).body.data[0]
     .availableproductqty;
 
   // A real product id, posted by someone who does not own it.
   const res = await bob
-    .post("/billInformation")
+    .post("/api/bills")
     .send({ name: "Bob", products: [lineFor(product, 5)] })
     .expect(409);
 
   assert.match(res.body.message, /no longer exists/i);
 
-  const after = (await alice.get("/products").expect(200)).body.products[0]
+  const after = (await alice.get("/api/products").expect(200)).body.data[0]
     .availableproductqty;
   assert.equal(after, before, "alice's stock moved for someone else's bill");
 
-  const bills = await bob.get("/billInformation").expect(200);
+  const bills = await bob.get("/api/bills").expect(200);
   assert.equal(bills.body.meta.total, 0, "the bill must not have been created");
 });
 
@@ -268,17 +278,17 @@ test("bills and customers keep separate sequences from products", async () => {
   await createProduct(alice, { productname: "P" });
 
   const customer = (
-    await alice.post("/customers").send({ name: "C" }).expect(201)
+    await alice.post("/api/customers").send({ name: "C" }).expect(201)
   ).body.data;
   assert.equal(customer.id, 1);
 
   const product = await createProduct(alice, { productname: "Q" });
   const bill = (
     await alice
-      .post("/billInformation")
+      .post("/api/bills")
       .send({ name: "C", products: [lineFor(product, 1)] })
       .expect(201)
-  ).body.billinfo;
+  ).body.data;
 
   assert.equal(bill.id, 1);
 });
@@ -288,11 +298,11 @@ test("bills and customers keep separate sequences from products", async () => {
 /* ------------------------------------------------------------------ */
 
 test("an owner sent in the request body is ignored", async () => {
-  const aliceMe = (await alice.get("/me").expect(200)).body.user;
+  const aliceMe = (await alice.get("/api/auth/me").expect(200)).body.data;
 
   // Bob tries to file a product under Alice's account.
   const res = await bob
-    .post("/products")
+    .post("/api/products")
     .send({
       productname: "Planted",
       availableproductqty: 1,
@@ -303,7 +313,7 @@ test("an owner sent in the request body is ignored", async () => {
 
   assert.notEqual(String(res.body.data.user), String(aliceMe._id));
 
-  const hers = await alice.get("/products").expect(200);
+  const hers = await alice.get("/api/products").expect(200);
   assert.equal(
     hers.body.meta.total,
     0,
@@ -313,7 +323,7 @@ test("an owner sent in the request body is ignored", async () => {
 
 test("an id sent in the request body does not override the counter", async () => {
   const res = await alice
-    .post("/products")
+    .post("/api/products")
     .send({
       productname: "Chosen",
       availableproductqty: 1,

@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { isPaise, toPaise, percentOf } = require("../utils/money");
+const { isPaise, toPaise, percentOf } = require("../src/utils/money");
 
 test("isPaise accepts whole non-negative amounts only", () => {
   assert.equal(isPaise(0), true);

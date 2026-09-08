@@ -15,6 +15,9 @@ const request = require("supertest");
  * execute the helper as a test file.
  */
 
+/** Every route the browser app talks to hangs off this prefix. */
+const API = "/api";
+
 let mongod = null;
 
 /** Boots a fresh database and returns the app wired to it. */
@@ -22,9 +25,9 @@ async function startTestApp() {
   mongod = await MongoMemoryServer.create();
 
   /*
-   * Set before requiring app.js: it reads these at require time and exits the
-   * process without them. dotenv does not overwrite variables that are already
-   * set, so these win over whatever .env holds.
+   * Set before requiring the app: config/env.js reads these at require time
+   * and exits the process without them. dotenv does not overwrite variables
+   * that are already set, so these win over whatever .env holds.
    */
   const throwawayUri = mongod.getUri("billbook-test");
   process.env.MONGO_DB_URL = throwawayUri;
@@ -36,7 +39,7 @@ async function startTestApp() {
   delete process.env.COOKIE_SECURE;
   delete process.env.COOKIE_DOMAIN;
 
-  const app = require("../app");
+  const app = require("../src/app");
 
   /*
    * A test suite that quietly connected to the real cluster would delete a
@@ -50,8 +53,8 @@ async function startTestApp() {
     );
   }
 
-  const { connectMongo } = require("../config/mongo");
-  await connectMongo();
+  const { connectDatabase } = require("../src/config/database");
+  await connectDatabase();
 
   // Unique indexes have to be built before a test can prove one bites.
   await Promise.all(
@@ -84,12 +87,12 @@ async function signIn(app, email, { username = "tester" } = {}) {
   const agent = request.agent(app);
 
   await agent
-    .post("/signup")
+    .post(`${API}/auth/signup`)
     .send({ email, username, password: DEFAULT_PASSWORD })
     .expect(201);
 
   await agent
-    .post("/login")
+    .post(`${API}/auth/login`)
     .send({ email, password: DEFAULT_PASSWORD })
     .expect(200);
 
@@ -99,7 +102,7 @@ async function signIn(app, email, { username = "tester" } = {}) {
 /** Creates a product and returns the saved document. Prices are in paise. */
 async function createProduct(agent, values = {}) {
   const res = await agent
-    .post("/products")
+    .post(`${API}/products`)
     .send({
       productname: "Widget",
       availableproductqty: 10,
@@ -129,12 +132,16 @@ function lineFor(
 
 /** Stock on hand for a product, straight from the database. */
 async function stockOf(agent, productId) {
-  const res = await agent.get("/products").query({ limit: 500 }).expect(200);
-  const product = res.body.products.find((p) => p._id === String(productId));
+  const res = await agent
+    .get(`${API}/products`)
+    .query({ limit: 500 })
+    .expect(200);
+  const product = res.body.data.find((p) => p._id === String(productId));
   return product ? product.availableproductqty : null;
 }
 
 module.exports = {
+  API,
   startTestApp,
   stopTestApp,
   clearDatabase,

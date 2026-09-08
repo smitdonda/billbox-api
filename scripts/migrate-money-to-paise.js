@@ -15,8 +15,8 @@
  */
 const { run } = require("./_lib");
 
-const Product = require("../models/products");
-const BillInfo = require("../models/BilIInfo");
+const Product = require("../src/models/Product");
+const BillInfo = require("../src/models/BillInfo");
 
 /** rupees -> paise, rounded to the nearest whole paisa. */
 const toPaise = (field) => ({

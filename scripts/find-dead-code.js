@@ -25,13 +25,13 @@ const SKIP_DIRS = new Set([
   ".vercel",
   "backups",
   "coverage",
-  "views",
+  "public",
 ]);
 
 /** Things nothing is supposed to import: entry points, tests, migrations. */
 const ENTRY_POINTS = [
-  /^app\.js$/,
-  /^bin[\\/]/,
+  /^server\.js$/,
+  /^src[\\/]app\.js$/,
   /^eslint\.config\.js$/,
   /^test[\\/]/,
   /^scripts[\\/]/,

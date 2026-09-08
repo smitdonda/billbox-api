@@ -8,7 +8,13 @@ const globals = require("globals");
  */
 module.exports = [
   {
-    ignores: ["node_modules/**", "backups/**", ".vercel/**", "coverage/**"],
+    ignores: [
+      "node_modules/**",
+      "backups/**",
+      ".vercel/**",
+      "coverage/**",
+      "src/public/**",
+    ],
   },
   {
     files: ["**/*.js"],

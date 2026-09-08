@@ -23,7 +23,7 @@ test.beforeEach(async () => {
 });
 
 const addCustomer = (values = {}) =>
-  agent.post("/customers").send({
+  agent.post("/api/customers").send({
     name: "Acme Traders",
     email: "billing@acme.example",
     phoneNo: "9876543210",
@@ -39,25 +39,25 @@ test("a customer round-trips through create, list, update and delete", async () 
   const created = (await addCustomer().expect(201)).body.data;
   assert.equal(created.id, 1);
 
-  const listed = await agent.get("/customers").expect(200);
+  const listed = await agent.get("/api/customers").expect(200);
   assert.equal(listed.body.meta.total, 1);
 
   const updated = await agent
-    .put(`/customers/${created._id}`)
+    .put(`/api/customers/${created._id}`)
     .send({ name: "Acme Trading Co" })
     .expect(200);
-  assert.equal(updated.body.customer.name, "Acme Trading Co");
+  assert.equal(updated.body.data.name, "Acme Trading Co");
   // A partial update must not blank the fields it did not mention.
-  assert.equal(updated.body.customer.email, "billing@acme.example");
-  assert.equal(updated.body.customer.gstNo, "24AAAAA0000A1Z5");
+  assert.equal(updated.body.data.email, "billing@acme.example");
+  assert.equal(updated.body.data.gstNo, "24AAAAA0000A1Z5");
 
-  await agent.delete(`/customers/${created._id}`).expect(200);
-  await agent.delete(`/customers/${created._id}`).expect(404);
+  await agent.delete(`/api/customers/${created._id}`).expect(200);
+  await agent.delete(`/api/customers/${created._id}`).expect(404);
 });
 
 test("a customer needs a name", async () => {
   const res = await agent
-    .post("/customers")
+    .post("/api/customers")
     .send({ email: "a@b.example" })
     .expect(422);
   assert.match(res.body.message, /name is required/i);
@@ -82,12 +82,12 @@ test("a phone number keeps its leading zero", async () => {
 });
 
 test("a malformed id is a 422 and an unknown one a 404", async () => {
-  await agent.put("/customers/nope").send({ name: "x" }).expect(422);
+  await agent.put("/api/customers/nope").send({ name: "x" }).expect(422);
   await agent
-    .put("/customers/000000000000000000000000")
+    .put("/api/customers/000000000000000000000000")
     .send({ name: "x" })
     .expect(404);
-  await agent.delete("/customers/000000000000000000000000").expect(404);
+  await agent.delete("/api/customers/000000000000000000000000").expect(404);
 });
 
 test("customers page, search and sort server-side", async () => {
@@ -100,32 +100,32 @@ test("customers page, search and sort server-side", async () => {
   }
 
   const page = await agent
-    .get("/customers")
+    .get("/api/customers")
     .query({ limit: 3, page: 2 })
     .expect(200);
-  assert.equal(page.body.customers.length, 3);
+  assert.equal(page.body.data.length, 3);
   assert.equal(page.body.meta.total, 7);
   assert.equal(page.body.meta.pageCount, 3);
 
   const byName = await agent
-    .get("/customers")
+    .get("/api/customers")
     .query({ search: "Customer 03" })
     .expect(200);
   assert.equal(byName.body.meta.total, 1);
 
   const byPhone = await agent
-    .get("/customers")
+    .get("/api/customers")
     .query({ search: "9876543205" })
     .expect(200);
   assert.equal(byPhone.body.meta.total, 1);
-  assert.equal(byPhone.body.customers[0].name, "Customer 05");
+  assert.equal(byPhone.body.data[0].name, "Customer 05");
 
   const sorted = await agent
-    .get("/customers")
+    .get("/api/customers")
     .query({ sort: "name", dir: "asc", limit: 2 })
     .expect(200);
   assert.deepEqual(
-    sorted.body.customers.map((c) => c.name),
+    sorted.body.data.map((c) => c.name),
     ["Customer 01", "Customer 02"]
   );
 });
@@ -135,11 +135,11 @@ test("a customer search matches the GST number", async () => {
   await addCustomer({ name: "Other", gstNo: "24AAAAA0000A1Z5" }).expect(201);
 
   const res = await agent
-    .get("/customers")
+    .get("/api/customers")
     .query({ search: "27BBBBB" })
     .expect(200);
   assert.equal(res.body.meta.total, 1);
-  assert.equal(res.body.customers[0].name, "Findable");
+  assert.equal(res.body.data[0].name, "Findable");
 });
 
 /* ------------------------------------------------------------------ */
@@ -148,7 +148,7 @@ test("a customer search matches the GST number", async () => {
 
 test("the company profile is created once and updated thereafter", async () => {
   const created = await agent
-    .post("/my-profile")
+    .put("/api/profile")
     .send({
       companyname: "Books Ltd",
       cemail: "HQ@Books.Example",
@@ -158,7 +158,7 @@ test("the company profile is created once and updated thereafter", async () => {
       pinno: "395007",
       phone: "9876543210",
     })
-    .expect(201);
+    .expect(200);
 
   assert.equal(created.body.data.companyname, "Books Ltd");
   assert.equal(created.body.data.cemail, "hq@books.example");
@@ -166,45 +166,29 @@ test("the company profile is created once and updated thereafter", async () => {
   assert.equal(created.body.data.pinno, "395007");
 
   const again = await agent
-    .post("/my-profile")
+    .put("/api/profile")
     .send({ companyname: "Books Limited" })
     .expect(200);
   assert.equal(again.body.data.companyname, "Books Limited");
-  // The fields the second post did not mention survive.
+  // The fields the second save did not mention survive.
   assert.equal(again.body.data.city, "Surat");
 
-  const listed = await agent.get("/my-profile").expect(200);
-  assert.equal(listed.body.profile.length, 1);
+  // Saving twice makes one profile, not two: the resource is a singleton.
+  assert.equal(again.body.data._id, created.body.data._id);
+
+  const read = await agent.get("/api/profile").expect(200);
+  assert.equal(read.body.data.companyname, "Books Limited");
 });
 
 test("the company profile needs a name", async () => {
   const res = await agent
-    .post("/my-profile")
+    .put("/api/profile")
     .send({ city: "Surat" })
     .expect(422);
   assert.match(res.body.message, /company name is required/i);
 });
 
-test("the profile can be edited by id", async () => {
-  const created = (
-    await agent.post("/my-profile").send({ companyname: "Before" }).expect(201)
-  ).body.data;
-
-  const updated = await agent
-    .put(`/my-profile/${created._id}`)
-    .send({ companyname: "After", city: "Ahmedabad" })
-    .expect(200);
-
-  assert.equal(updated.body.profile.companyname, "After");
-  assert.equal(updated.body.profile.city, "Ahmedabad");
-
-  await agent
-    .put("/my-profile/000000000000000000000000")
-    .send({ companyname: "Nowhere" })
-    .expect(404);
-});
-
-test("an account with no profile yet gets an empty list, not a 404", async () => {
-  const res = await agent.get("/my-profile").expect(200);
-  assert.deepEqual(res.body.profile, []);
+test("an account with no profile yet gets null, not a 404", async () => {
+  const res = await agent.get("/api/profile").expect(200);
+  assert.equal(res.body.data, null);
 });

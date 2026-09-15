@@ -1,7 +1,6 @@
 const { BillInfo, Customer, Product } = require("../models");
+const { LOW_STOCK_AT } = require("../utils/stock");
 
-/** A product at or below this many units is called out on the dashboard. */
-const LOW_STOCK_AT = 5;
 const LOW_STOCK_SHOWN = 6;
 const CHART_ITEMS = 8;
 const RECENT_BILLS = 6;

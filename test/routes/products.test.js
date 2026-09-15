@@ -282,10 +282,35 @@ test("stock totals follow the active search", async () => {
   assert.equal(res.body.meta.stockValue, 3000);
 });
 
+test("the restock count covers the whole catalogue and follows the search", async () => {
+  const shelves = [
+    ["Empty Shelf", 0],
+    ["Nearly Gone", 5],
+    ["Plenty", 6],
+    ["Lots", 40],
+  ];
+  for (const [productname, availableproductqty] of shelves) {
+    await createProduct(agent, { productname, availableproductqty });
+  }
+
+  // One row on the page, but the count is over all four products.
+  const all = await agent.get("/api/products").query({ limit: 1 }).expect(200);
+  assert.equal(all.body.data.length, 1);
+  assert.equal(all.body.meta.lowStock, 2);
+  assert.equal(all.body.meta.lowStockAt, 5);
+
+  const searched = await agent
+    .get("/api/products")
+    .query({ search: "Plenty" })
+    .expect(200);
+  assert.equal(searched.body.meta.lowStock, 0);
+});
+
 test("an empty catalogue reports zeros, not nulls", async () => {
   const res = await agent.get("/api/products").expect(200);
   assert.equal(res.body.meta.total, 0);
   assert.equal(res.body.meta.stockUnits, 0);
   assert.equal(res.body.meta.stockValue, 0);
+  assert.equal(res.body.meta.lowStock, 0);
   assert.equal(res.body.meta.pageCount, 1);
 });

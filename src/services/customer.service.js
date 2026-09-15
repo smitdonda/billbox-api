@@ -22,16 +22,23 @@ const listCustomers = async ({ userId, query = {} }) => {
   const { page, limit, skip } = parsePaging(query);
   const filter = ownedBy(userId, query.search);
 
-  const [customers, total] = await Promise.all([
+  /* The GST-registered count is over everything the filter matches, like the
+     total beside it. A cleared GST number is stored as "", so that counts as
+     unregistered along with a missing one. */
+  const [customers, total, gstRegistered] = await Promise.all([
     Customer.find(filter)
       .sort(parseSort(query, SORTABLE))
       .skip(skip)
       .limit(limit)
       .lean(),
     Customer.countDocuments(filter),
+    Customer.countDocuments({ ...filter, gstNo: { $nin: [null, ""] } }),
   ]);
 
-  return { customers, meta: pageMeta({ page, limit, total }) };
+  return {
+    customers,
+    meta: { ...pageMeta({ page, limit, total }), gstRegistered },
+  };
 };
 
 const createCustomer = async ({ userId, values }) => {

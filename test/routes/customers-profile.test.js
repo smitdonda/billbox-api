@@ -130,6 +130,28 @@ test("customers page, search and sort server-side", async () => {
   );
 });
 
+test("the GST-registered count covers every match, not the page", async () => {
+  await addCustomer({ name: "Registered One" }).expect(201);
+  await addCustomer({
+    name: "Registered Two",
+    gstNo: "27BBBBB1111B2Z6",
+  }).expect(201);
+  await addCustomer({ name: "Walk-in", gstNo: "" }).expect(201);
+  await agent.post("/api/customers").send({ name: "No GST Field" }).expect(201);
+
+  const all = await agent.get("/api/customers").query({ limit: 1 }).expect(200);
+  assert.equal(all.body.data.length, 1);
+  assert.equal(all.body.meta.total, 4);
+  assert.equal(all.body.meta.gstRegistered, 2);
+
+  const searched = await agent
+    .get("/api/customers")
+    .query({ search: "Walk-in" })
+    .expect(200);
+  assert.equal(searched.body.meta.total, 1);
+  assert.equal(searched.body.meta.gstRegistered, 0);
+});
+
 test("a customer search matches the GST number", async () => {
   await addCustomer({ name: "Findable", gstNo: "27BBBBB1111B2Z6" }).expect(201);
   await addCustomer({ name: "Other", gstNo: "24AAAAA0000A1Z5" }).expect(201);

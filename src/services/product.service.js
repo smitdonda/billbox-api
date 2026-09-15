@@ -6,6 +6,7 @@ const {
   searchFilter,
   parseSort,
 } = require("../utils/pagination");
+const { LOW_STOCK_AT } = require("../utils/stock");
 const { nextCounterId } = require("./counter.service");
 
 /** Columns a client may sort on — anything else falls back to newest first. */
@@ -33,7 +34,8 @@ const listProducts = async ({ userId, query = {} }) => {
    * The page, the count and the totals all run together — the client needs
    * every one of them to draw the screen and they do not depend on each
    * other. The totals cover everything the filter matches, not just this
-   * page, which is what the "units on hand" chip has always meant.
+   * page, which is what the "units on hand" chip has always meant — and the
+   * "need restocking" count means the same.
    */
   const [products, total, totals] = await Promise.all([
     Product.find(filter)
@@ -51,6 +53,11 @@ const listProducts = async ({ userId, query = {} }) => {
           value: {
             $sum: { $multiply: ["$unitprice", "$availableproductqty"] },
           },
+          lowStock: {
+            $sum: {
+              $cond: [{ $lte: ["$availableproductqty", LOW_STOCK_AT] }, 1, 0],
+            },
+          },
         },
       },
     ]),
@@ -62,6 +69,9 @@ const listProducts = async ({ userId, query = {} }) => {
       ...pageMeta({ page, limit, total }),
       stockUnits: totals[0]?.units || 0,
       stockValue: totals[0]?.value || 0,
+      lowStock: totals[0]?.lowStock || 0,
+      // Sent with the count so the page labels rows by the same threshold.
+      lowStockAt: LOW_STOCK_AT,
     },
   };
 };

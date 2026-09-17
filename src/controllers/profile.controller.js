@@ -3,19 +3,13 @@ const profileService = require("../services/profile.service");
 const { sendSuccess } = require("../utils/apiResponse");
 const { parseProfileBody } = require("../validators/profile.validator");
 
-/*
- * A singleton resource: one company profile per account. It is addressed as
- * /profile with no id, because "whose profile" is already answered by the
- * session — the old /my-profile/:id let a client name a document it could only
- * ever have one of.
- */
+// One company profile per account, so there is no id in the url
 
 const get = asyncHandler(async (req, res) => {
   const profile = await profileService.getProfile({ userId: req.user._id });
 
+  // data is null when the profile has not been filled in yet
   return sendSuccess(res, {
-    // null, not 404: "this account has not filled it in yet" is an answer the
-    // screen renders, not a failed request.
     data: profile,
     message: "My profile data successfully",
   });

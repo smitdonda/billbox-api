@@ -22,19 +22,11 @@ test.beforeEach(async () => {
   await clearDatabase();
 });
 
-/* ------------------------------------------------------------------ */
-/*  health                                                             */
-/* ------------------------------------------------------------------ */
-
 test("healthz reports the database it is actually connected to", async () => {
   const res = await request(app).get("/healthz").expect(200);
   assert.equal(res.body.success, true);
   assert.equal(res.body.data.db, "connected");
 });
-
-/* ------------------------------------------------------------------ */
-/*  signup                                                             */
-/* ------------------------------------------------------------------ */
 
 test("signup creates an account", async () => {
   const res = await request(app)
@@ -106,10 +98,6 @@ test("signup never returns the password hash", async () => {
   assert.equal(JSON.stringify(res.body).includes("$2"), false);
 });
 
-/* ------------------------------------------------------------------ */
-/*  login                                                              */
-/* ------------------------------------------------------------------ */
-
 test("login puts the token in an httpOnly cookie and not in the body", async () => {
   await request(app)
     .post("/api/auth/signup")
@@ -125,7 +113,7 @@ test("login puts the token in an httpOnly cookie and not in the body", async () 
     .send({ email: "amy@example.com", password: DEFAULT_PASSWORD })
     .expect(200);
 
-  // The whole point of the change: nothing on the page can read the session.
+  // token is only in the cookie
   assert.equal(res.body.token, undefined);
   assert.equal(JSON.stringify(res.body).toLowerCase().includes("eyj"), false);
   assert.equal(res.body.data.email, "amy@example.com");
@@ -135,7 +123,7 @@ test("login puts the token in an httpOnly cookie and not in the body", async () 
   assert.match(cookie, /HttpOnly/i);
   assert.match(cookie, /SameSite=Lax/i);
   assert.match(cookie, /Path=\//);
-  // Outside production, over plain http, a Secure cookie would never be stored.
+  // not Secure outside production (plain http)
   assert.doesNotMatch(cookie, /Secure/i);
 });
 
@@ -159,7 +147,6 @@ test("a wrong password and an unknown address are answered identically", async (
     .send({ email: "ghost@example.com", password: DEFAULT_PASSWORD })
     .expect(401);
 
-  // Telling them apart is what lets someone enumerate registered addresses.
   assert.equal(wrongPassword.body.message, noSuchUser.body.message);
   assert.equal(wrongPassword.headers["set-cookie"], undefined);
 });
@@ -189,16 +176,12 @@ test("repeated failures lock an address out and say for how long", async () => {
   assert.ok(Number(blocked.headers["retry-after"]) > 0);
   assert.match(blocked.body.message, /too many/i);
 
-  // Locked out before the password is even compared, so the right one waits too.
+  // the correct password is blocked too until the window ends
   await request(app)
     .post("/api/auth/login")
     .send({ email: "target@example.com", password: DEFAULT_PASSWORD })
     .expect(429);
 });
-
-/* ------------------------------------------------------------------ */
-/*  session                                                            */
-/* ------------------------------------------------------------------ */
 
 test("me answers 401 without a session and the account with one", async () => {
   await request(app).get("/api/auth/me").expect(401);
@@ -247,10 +230,6 @@ test("business routes refuse an anonymous caller", async () => {
   }
 });
 
-/* ------------------------------------------------------------------ */
-/*  request shape                                                      */
-/* ------------------------------------------------------------------ */
-
 test("an unknown path answers in the same envelope as everything else", async () => {
   const res = await request(app).get("/no-such-route").expect(404);
   assert.deepEqual(res.body, { success: false, message: "URL_NOT_FOUND" });
@@ -259,11 +238,7 @@ test("an unknown path answers in the same envelope as everything else", async ()
 test("a cross-site form post is not parsed, so it cannot ride the cookie", async () => {
   const agent = await signIn(app, "csrf@example.com");
 
-  /*
-   * Form-encoded bodies are the shape a cross-site POST can send without a
-   * preflight. The app parses JSON only, so the body arrives empty and the
-   * write fails validation instead of succeeding on a forged request.
-   */
+  // only JSON is parsed, so the form body arrives empty
   const res = await agent
     .post("/api/products")
     .type("form")

@@ -1,13 +1,6 @@
 const ApiError = require("../utils/ApiError");
 
-/*
- * What a client is allowed to write to a product, and what counts as a usable
- * value. `id` stays under the counter's control and `user` is never taken from
- * the body — a request that names an owner is ignored, not obeyed.
- *
- * `unitprice` is a whole number of paise, not rupees. See utils/money.js.
- */
-
+// id and user are set by the server, never taken from the body
 const pick = (body = {}) => {
   const values = {};
 
@@ -30,11 +23,7 @@ const hasInvalidNumber = (values) =>
       key !== "productname" && (!Number.isFinite(value) || value < 0)
   );
 
-/**
- * @param {object} body The request body.
- * @param {{ partial?: boolean }} options `partial` is an edit, where an
- *   omitted field means "leave it alone" rather than "clear it".
- */
+// partial: true for updates, where missing fields are left unchanged
 const parseProductBody = (body, { partial = false } = {}) => {
   const values = pick(body);
 

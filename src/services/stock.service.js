@@ -2,18 +2,9 @@ const { Product } = require("../models");
 const ApiError = require("../utils/ApiError");
 const { isObjectId } = require("../utils/objectId");
 
-/*
- * Moving units on and off the shelf. Deciding how many to move is arithmetic
- * and lives in utils/billing.js; this module is the part that writes.
- */
-
-/**
- * Map a bill's line items to `{ productId -> units }`, within one account.
- *
- * Bills written before line items carried a productId are matched by their
- * catalogue number, then by name, so old records still adjust stock. Those
- * fallbacks are resolved in a single query rather than one per line.
- */
+// Returns a Map of productId -> total quantity for the given bill lines.
+// Older bills have no productId, so those lines are matched by product id
+// number or by name.
 const tallyByProduct = async (lines = [], userId) => {
   if (!userId) throw new Error("tallyByProduct needs a user id");
 
@@ -23,7 +14,6 @@ const tallyByProduct = async (lines = [], userId) => {
 
   const needsLookup = usable.filter((line) => !isObjectId(line?.productId));
 
-  // One round trip for every line that has to be matched the old way.
   const lookup = { byNumber: new Map(), byName: new Map() };
 
   if (needsLookup.length) {
@@ -78,7 +68,7 @@ const tallyByProduct = async (lines = [], userId) => {
         null;
     }
 
-    // A product deleted after billing has no stock left to adjust.
+    // product was deleted, nothing to adjust
     if (!productId) continue;
     tally.set(productId, (tally.get(productId) || 0) + quantity);
   }
@@ -86,14 +76,8 @@ const tallyByProduct = async (lines = [], userId) => {
   return tally;
 };
 
-/**
- * Apply a stock delta with a guard on each decrement, undoing what was already
- * applied if any product turns out to be short. Mongo standalone deployments
- * have no transactions, so compensation is the portable way to stay consistent.
- *
- * Every write is scoped to the owning account, so a forged productId belonging
- * to someone else matches nothing and is reported as missing.
- */
+// Applies the stock changes one product at a time. If a product does not
+// have enough stock, the changes already made are undone.
 const applyStockDelta = async (delta, userId) => {
   if (!userId) throw new Error("applyStockDelta needs a user id");
 
@@ -127,7 +111,7 @@ const applyStockDelta = async (delta, userId) => {
 
       throw ApiError.conflict(
         product
-          ? `Not enough stock for "${product.productname}" — ${product.availableproductqty} in stock, ${consume} needed`
+          ? `Not enough stock for "${product.productname}". ${product.availableproductqty} in stock, ${consume} needed`
           : "A product on this bill no longer exists"
       );
     }

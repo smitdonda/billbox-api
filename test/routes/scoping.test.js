@@ -10,15 +10,7 @@ const {
   lineFor,
 } = require("../../test-helpers/app");
 
-/*
- * Before ownership existed, requireAuth proved that *someone* was signed in
- * and then every route ran find({}). A second account saw, edited and deleted
- * the first account's stock, customers and invoices.
- *
- * This file is the standing proof that it cannot happen again. Each test sets
- * up two accounts and checks that the second one is answered as though the
- * first one's records simply are not there.
- */
+// Two accounts: bob must never see or change alice's data
 
 let app;
 let alice;
@@ -36,7 +28,6 @@ test.beforeEach(async () => {
   bob = await signIn(app, "bob@example.com", { username: "bob" });
 });
 
-/** Everything one account can own, created in one go. */
 async function seedAlice() {
   const product = await createProduct(alice, {
     productname: "Alice Widget",
@@ -78,10 +69,6 @@ async function seedAlice() {
 
   return { product, customer, bill, profile };
 }
-
-/* ------------------------------------------------------------------ */
-/*  reading                                                            */
-/* ------------------------------------------------------------------ */
 
 test("one account's lists never contain another's records", async () => {
   await seedAlice();
@@ -136,10 +123,6 @@ test("the dashboard counts only what the caller owns", async () => {
   assert.equal(count.body.data.product, 0);
 });
 
-/* ------------------------------------------------------------------ */
-/*  writing                                                            */
-/* ------------------------------------------------------------------ */
-
 test("another account cannot edit or delete a product", async () => {
   const { product } = await seedAlice();
 
@@ -186,11 +169,7 @@ test("another account cannot edit or delete a bill", async () => {
 test("another account cannot overwrite the company letterhead", async () => {
   const { profile } = await seedAlice();
 
-  /*
-   * The profile has no id in the URL any more, so "write someone else's" is
-   * not a request that can be phrased: bob's save is bob's own. What has to
-   * hold is that it leaves alice's letterhead exactly where it was.
-   */
+  // bob saving a profile only creates his own
   await bob.put("/api/profile").send({ companyname: "Stolen Ltd" }).expect(200);
 
   const still = await alice.get("/api/profile").expect(200);
@@ -229,17 +208,13 @@ test("saving the profile twice updates the one document instead of adding anothe
   assert.equal(res.body.data.companyname, "Second");
 });
 
-/* ------------------------------------------------------------------ */
-/*  stock                                                              */
-/* ------------------------------------------------------------------ */
-
 test("a bill cannot consume stock belonging to another account", async () => {
   const { product } = await seedAlice();
 
   const before = (await alice.get("/api/products").expect(200)).body.data[0]
     .availableproductqty;
 
-  // A real product id, posted by someone who does not own it.
+  // alice's product id used in bob's bill
   const res = await bob
     .post("/api/bills")
     .send({ name: "Bob", products: [lineFor(product, 5)] })
@@ -255,10 +230,6 @@ test("a bill cannot consume stock belonging to another account", async () => {
   assert.equal(bills.body.meta.total, 0, "the bill must not have been created");
 });
 
-/* ------------------------------------------------------------------ */
-/*  numbering                                                          */
-/* ------------------------------------------------------------------ */
-
 test("human-facing ids start at 1 for every account", async () => {
   const hers = await createProduct(alice, { productname: "Hers" });
   const his = await createProduct(bob, { productname: "His" });
@@ -269,7 +240,7 @@ test("human-facing ids start at 1 for every account", async () => {
   const second = await createProduct(alice, { productname: "Hers again" });
   assert.equal(second.id, 2);
 
-  // Bob's own sequence is untouched by Alice creating two.
+  // bob's counter is separate from alice's
   const hisSecond = await createProduct(bob, { productname: "His again" });
   assert.equal(hisSecond.id, 2);
 });
@@ -293,14 +264,10 @@ test("bills and customers keep separate sequences from products", async () => {
   assert.equal(bill.id, 1);
 });
 
-/* ------------------------------------------------------------------ */
-/*  input trust                                                        */
-/* ------------------------------------------------------------------ */
-
 test("an owner sent in the request body is ignored", async () => {
   const aliceMe = (await alice.get("/api/auth/me").expect(200)).body.data;
 
-  // Bob tries to file a product under Alice's account.
+  // bob tries to add a product to alice's account
   const res = await bob
     .post("/api/products")
     .send({

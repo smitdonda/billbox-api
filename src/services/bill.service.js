@@ -28,11 +28,6 @@ const listBills = async ({ userId, query = {} }) => {
   const { page, limit, skip } = parsePaging(query);
   const filter = ownedBy(userId, query.search);
 
-  /*
-   * The billed total is summed in the database over everything the filter
-   * matches, not over the page. The dashboard used to fetch every bill just
-   * to add up this one number in the browser.
-   */
   const [bills, total, totals] = await Promise.all([
     BillInfo.find(filter)
       .sort(parseSort(query, SORTABLE, { createdAt: -1 }))
@@ -40,6 +35,7 @@ const listBills = async ({ userId, query = {} }) => {
       .limit(limit)
       .lean(),
     BillInfo.countDocuments(filter),
+    // total of all matching bills, not only this page
     BillInfo.aggregate([
       { $match: filter },
       { $group: { _id: null, billed: { $sum: "$totalproductsprice" } } },
@@ -61,13 +57,7 @@ const getBill = async ({ userId, billId }) => {
   return bill;
 };
 
-/**
- * Creates a bill, taking its units off the shelf first.
- *
- * Order matters: if anything is short the bill is never created, and if the
- * bill fails to save the units go straight back. There is no transaction to
- * lean on, so the compensating write is the guarantee.
- */
+// Stock is taken first. If saving the bill fails, the stock is put back.
 const createBill = async ({
   userId,
   customer,
@@ -88,7 +78,6 @@ const createBill = async ({
       user: userId,
     });
   } catch (error) {
-    // The bill failed to save — hand the stock back.
     await applyStockDelta(stockDelta(wanted, new Map()), userId).catch(
       () => {}
     );
@@ -96,12 +85,7 @@ const createBill = async ({
   }
 };
 
-/**
- * Rewrites a bill, moving stock by the difference only.
- *
- * The old code decremented the full quantity again on every save, so editing a
- * bill drained stock twice.
- */
+// Only the difference between the old and new quantities is applied to stock
 const updateBill = async ({
   userId,
   billId,
@@ -132,9 +116,7 @@ const deleteBill = async ({ userId, billId }) => {
   const bill = await BillInfo.findOneAndDelete({ _id: billId, user: userId });
   if (!bill) throw ApiError.notFound("Not found Bill Information");
 
-  // Cancelling a bill returns its units to the shelf. The bill is already
-  // gone, so a failure here is logged rather than raised: there is nothing
-  // left to roll back to.
+  // Put the stock back. The bill is already deleted, so only log a failure.
   const released = await tallyByProduct(bill.products, userId);
   await applyStockDelta(stockDelta(released, new Map()), userId).catch(
     (error) =>

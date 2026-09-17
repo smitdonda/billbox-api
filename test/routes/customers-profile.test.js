@@ -31,10 +31,6 @@ const addCustomer = (values = {}) =>
     ...values,
   });
 
-/* ------------------------------------------------------------------ */
-/*  customers                                                          */
-/* ------------------------------------------------------------------ */
-
 test("a customer round-trips through create, list, update and delete", async () => {
   const created = (await addCustomer().expect(201)).body.data;
   assert.equal(created.id, 1);
@@ -47,7 +43,7 @@ test("a customer round-trips through create, list, update and delete", async () 
     .send({ name: "Acme Trading Co" })
     .expect(200);
   assert.equal(updated.body.data.name, "Acme Trading Co");
-  // A partial update must not blank the fields it did not mention.
+  // fields that were not sent stay the same
   assert.equal(updated.body.data.email, "billing@acme.example");
   assert.equal(updated.body.data.gstNo, "24AAAAA0000A1Z5");
 
@@ -164,10 +160,6 @@ test("a customer search matches the GST number", async () => {
   assert.equal(res.body.data[0].name, "Findable");
 });
 
-/* ------------------------------------------------------------------ */
-/*  company profile                                                    */
-/* ------------------------------------------------------------------ */
-
 test("the company profile is created once and updated thereafter", async () => {
   const created = await agent
     .put("/api/profile")
@@ -184,7 +176,6 @@ test("the company profile is created once and updated thereafter", async () => {
 
   assert.equal(created.body.data.companyname, "Books Ltd");
   assert.equal(created.body.data.cemail, "hq@books.example");
-  // Identifiers, not quantities — a PIN code keeps its shape.
   assert.equal(created.body.data.pinno, "395007");
 
   const again = await agent
@@ -192,10 +183,10 @@ test("the company profile is created once and updated thereafter", async () => {
     .send({ companyname: "Books Limited" })
     .expect(200);
   assert.equal(again.body.data.companyname, "Books Limited");
-  // The fields the second save did not mention survive.
+  // fields that were not sent stay the same
   assert.equal(again.body.data.city, "Surat");
 
-  // Saving twice makes one profile, not two: the resource is a singleton.
+  // still the same document
   assert.equal(again.body.data._id, created.body.data._id);
 
   const read = await agent.get("/api/profile").expect(200);

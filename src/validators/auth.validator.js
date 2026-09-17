@@ -30,11 +30,7 @@ const parseSignupBody = (body = {}) => {
   return values;
 };
 
-/**
- * Login is deliberately lax: the credentials are either right or they are not,
- * and telling a caller that its email was malformed is a fact about the
- * account list it has no business learning.
- */
+// No format checks on login, wrong details just fail with 401
 const parseLoginBody = (body = {}) => ({
   email: email(body.email),
   password: String(body.password || ""),

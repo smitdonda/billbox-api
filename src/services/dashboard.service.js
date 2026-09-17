@@ -4,19 +4,14 @@ const { LOW_STOCK_AT } = require("../utils/stock");
 const LOW_STOCK_SHOWN = 6;
 const CHART_ITEMS = 8;
 const RECENT_BILLS = 6;
-/** How many months of billing the dashboard column chart draws. */
 const SALES_MONTHS = 6;
 
-/*
- * The first instant of the month `back` months before the current one, in the
- * server's zone. Six months of columns means five months back plus this one.
- */
+// First day of the month, `back` months ago
 const monthStart = (back) => {
   const now = new Date();
   return new Date(now.getFullYear(), now.getMonth() - back, 1, 0, 0, 0, 0);
 };
 
-// count() is deprecated in Mongoose 7; countDocuments() is the replacement.
 const countAll = async (user) => {
   const [customer, product, billInformation] = await Promise.all([
     Customer.countDocuments({ user }),
@@ -27,16 +22,7 @@ const countAll = async (user) => {
   return { customer, product, billInformation };
 };
 
-/*
- * Everything the dashboard draws, in one read.
- *
- * It used to fetch every product and every bill and add them up in the
- * browser, which meant the page got slower with every invoice ever raised.
- * The sums and the top-N lists are the database's job; what crosses the wire
- * is now a fixed handful of rows whatever the account holds.
- *
- * All money is in paise.
- */
+// Everything the dashboard page needs in one request. Amounts are in paise.
 const getSummary = async ({ userId: user }) => {
   const [
     customerCount,
@@ -99,15 +85,11 @@ const getSummary = async ({ userId: user }) => {
           name: 1,
           createdAt: 1,
           totalproductsprice: 1,
-          // The line items themselves are never rendered here, only counted.
           productCount: { $size: { $ifNull: ["$products", []] } },
         },
       },
     ]),
 
-    /* Billing per calendar month, for the dashboard's column chart. Grouped in
-       the database rather than by pulling every bill and bucketing them here,
-       for the same reason as everything else above. */
     BillInfo.aggregate([
       { $match: { user, createdAt: { $gte: monthStart(SALES_MONTHS - 1) } } },
       {
@@ -121,8 +103,7 @@ const getSummary = async ({ userId: user }) => {
     ]),
   ]);
 
-  /* A month with no bills returns no row, but the chart still needs its column
-     — otherwise a quiet month silently shifts every other bar along. */
+  // Fill in months that have no bills so the chart always has 6 columns
   const billedByMonth = new Map(
     salesByMonth.map((row) => [`${row._id.y}-${row._id.m}`, row])
   );
@@ -138,6 +119,8 @@ const getSummary = async ({ userId: user }) => {
       bills: row?.bills || 0,
     };
   });
+
+  const thisMonth = monthlySales[monthlySales.length - 1];
 
   return {
     counts: {
@@ -157,19 +140,9 @@ const getSummary = async ({ userId: user }) => {
     })),
     recentBills,
     monthlySales,
-    /* The last entry is always the current month, so the header does not have
-       to work out which column is "now". */
-    billedThisMonth: monthlySales[monthlySales.length - 1]?.total || 0,
-    billsThisMonth: monthlySales[monthlySales.length - 1]?.bills || 0,
+    billedThisMonth: thisMonth?.total || 0,
+    billsThisMonth: thisMonth?.bills || 0,
   };
 };
 
-module.exports = {
-  LOW_STOCK_AT,
-  LOW_STOCK_SHOWN,
-  CHART_ITEMS,
-  RECENT_BILLS,
-  SALES_MONTHS,
-  countAll,
-  getSummary,
-};
+module.exports = { countAll, getSummary };

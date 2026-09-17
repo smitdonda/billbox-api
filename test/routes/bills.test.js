@@ -35,10 +35,6 @@ const CUSTOMER = {
 const postBill = (products, extra = {}) =>
   agent.post("/api/bills").send({ ...CUSTOMER, ...extra, products });
 
-/* ------------------------------------------------------------------ */
-/*  pricing                                                            */
-/* ------------------------------------------------------------------ */
-
 test("the server prices the bill and ignores the totals the client sent", async () => {
   const product = await createProduct(agent, {
     unitprice: 100000, // Rs 1,000.00
@@ -52,7 +48,7 @@ test("the server prices the bill and ignores the totals the client sent", async 
           { title: "S GST 2.5%", value: 2.5 },
           { title: "C GST 2.5%", value: 2.5 },
         ]),
-        // A client that could name its own total could bill anything it liked.
+        // wrong totals from the client, should be ignored
         pandqtotal: 1,
         gsttex: 1,
       },
@@ -99,14 +95,10 @@ test("a bill needs at least one usable line", async () => {
   const product = await createProduct(agent);
 
   await postBill([]).expect(422);
-  // Zero quantity and a nameless line are both dropped, leaving nothing.
+  // lines with no quantity or no name are dropped
   await postBill([{ ...lineFor(product, 0) }]).expect(422);
   await postBill([{ ...lineFor(product, 1), productname: "" }]).expect(422);
 });
-
-/* ------------------------------------------------------------------ */
-/*  stock movement                                                     */
-/* ------------------------------------------------------------------ */
 
 test("creating a bill takes its units off the shelf", async () => {
   const product = await createProduct(agent, { availableproductqty: 20 });
@@ -117,30 +109,26 @@ test("creating a bill takes its units off the shelf", async () => {
 });
 
 test("editing a bill moves stock by the difference, not the whole quantity", async () => {
-  /*
-   * The bug this replaces: saving an edit decremented the full quantity again,
-   * so opening a bill and pressing save twice drained the shelf twice.
-   */
   const product = await createProduct(agent, { availableproductqty: 20 });
 
   const bill = (await postBill([lineFor(product, 3)]).expect(201)).body.data;
   assert.equal(await stockOf(agent, product._id), 17);
 
-  // Raised to 5: take 2 more, not 5.
+  // 3 -> 5: take 2 more
   await agent
     .put(`/api/bills/${bill._id}`)
     .send({ ...CUSTOMER, products: [lineFor(product, 5)] })
     .expect(200);
   assert.equal(await stockOf(agent, product._id), 15);
 
-  // Lowered to 1: give 4 back.
+  // 5 -> 1: give 4 back
   await agent
     .put(`/api/bills/${bill._id}`)
     .send({ ...CUSTOMER, products: [lineFor(product, 1)] })
     .expect(200);
   assert.equal(await stockOf(agent, product._id), 19);
 
-  // Saved again unchanged: nothing moves.
+  // saved again without changes
   await agent
     .put(`/api/bills/${bill._id}`)
     .send({ ...CUSTOMER, products: [lineFor(product, 1)] })
@@ -192,10 +180,6 @@ test("deleting a bill puts everything it took back", async () => {
   assert.equal(await stockOf(agent, b._id), 10);
 });
 
-/* ------------------------------------------------------------------ */
-/*  running out                                                        */
-/* ------------------------------------------------------------------ */
-
 test("a bill for more than there is, is refused and creates nothing", async () => {
   const product = await createProduct(agent, {
     productname: "Scarce",
@@ -223,7 +207,6 @@ test("a line that runs short hands back the stock the earlier lines took", async
 
   await postBill([lineFor(plenty, 5), lineFor(scarce, 3)]).expect(409);
 
-  // Without the compensation, Plenty would sit at 15 with no bill to show for it.
   assert.equal(await stockOf(agent, plenty._id), 20);
   assert.equal(await stockOf(agent, scarce._id), 1);
 });
@@ -243,10 +226,6 @@ test("a failed edit leaves stock where it was", async () => {
   const unchanged = await agent.get(`/api/bills/${bill._id}`).expect(200);
   assert.equal(unchanged.body.data.products[0].quantity, 2);
 });
-
-/* ------------------------------------------------------------------ */
-/*  listing                                                            */
-/* ------------------------------------------------------------------ */
 
 test("the billed total is summed over every matching bill, not the page", async () => {
   const product = await createProduct(agent, {
@@ -295,11 +274,7 @@ test("bills come back newest first by default", async () => {
   assert.equal(res.body.data[0].name, "Newer");
 });
 
-/* ------------------------------------------------------------------ */
-/*  dashboard                                                          */
-/* ------------------------------------------------------------------ */
-
-test("the dashboard summary answers with sums the browser used to compute", async () => {
+test("the dashboard summary returns counts, totals and low stock", async () => {
   const stocked = await createProduct(agent, {
     productname: "Stocked",
     availableproductqty: 10,
@@ -322,7 +297,7 @@ test("the dashboard summary answers with sums the browser used to compute", asyn
     billInformation: 1,
   });
   assert.equal(res.body.data.billed, 2000);
-  // 9 left at 2000 after the bill, plus 2 at 5000.
+  // 9 left at 2000 after the bill, plus 2 at 5000
   assert.equal(res.body.data.stockValue, 9 * 2000 + 2 * 5000);
 
   assert.equal(res.body.data.lowStockCount, 1);
@@ -339,7 +314,7 @@ test("the dashboard summary answers with sums the browser used to compute", asyn
   );
 });
 
-test("the dashboard chart is capped, so it stays one screenful", async () => {
+test("the dashboard chart shows at most 8 products", async () => {
   for (let n = 1; n <= 12; n += 1) {
     await createProduct(agent, {
       productname: `P${n}`,

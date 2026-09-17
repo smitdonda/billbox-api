@@ -1,16 +1,8 @@
 require("dotenv").config({ quiet: true });
 const mongoose = require("mongoose");
 
-/*
- * Shared plumbing for the one-off migration scripts.
- *
- * Every migration records its name in a `migrations` collection and refuses to
- * run twice. That matters most for the money migration: running it a second
- * time would multiply every price by a hundred again, and nothing about the
- * data itself would say it had already happened.
- */
-
-const LEDGER = "migrations";
+// Helper for the migration scripts. Each migration is saved in the
+// "migrations" collection so it only runs once (use --force to run it again).
 
 const connect = async () => {
   if (!process.env.MONGO_DB_URL) {
@@ -22,25 +14,8 @@ const connect = async () => {
   return mongoose.connection;
 };
 
-const ledger = () => mongoose.connection.collection(LEDGER);
+const migrations = () => mongoose.connection.collection("migrations");
 
-const alreadyApplied = async (name) =>
-  Boolean(await ledger().findOne({ name }));
-
-const markApplied = async (name, detail = {}) => {
-  await ledger().updateOne(
-    { name },
-    { $set: { name, detail, appliedAt: new Date() } },
-    { upsert: true }
-  );
-};
-
-/**
- * Wraps a migration: connects, guards against a repeat run, records the
- * result, and always closes the connection so the process exits.
- *
- * Pass --force to re-run one deliberately.
- */
 const run = async (name, fn) => {
   const force = process.argv.includes("--force");
   let code = 0;
@@ -48,16 +23,20 @@ const run = async (name, fn) => {
   try {
     await connect();
 
-    if (!force && (await alreadyApplied(name))) {
-      console.log(`${name}: already applied — nothing to do.`);
+    if (!force && (await migrations().findOne({ name }))) {
+      console.log(`${name}: already applied, nothing to do.`);
       return;
     }
 
     const detail = (await fn(mongoose.connection)) || {};
-    await markApplied(name, detail);
+    await migrations().updateOne(
+      { name },
+      { $set: { name, detail, appliedAt: new Date() } },
+      { upsert: true }
+    );
     console.log(`${name}: done.`, detail);
   } catch (error) {
-    console.error(`${name}: failed —`, error.message);
+    console.error(`${name}: failed.`, error.message);
     code = 1;
   } finally {
     await mongoose.disconnect().catch(() => {});

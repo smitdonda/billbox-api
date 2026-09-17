@@ -23,10 +23,6 @@ test.beforeEach(async () => {
   agent = await signIn(app, "shop@example.com", { username: "shop" });
 });
 
-/* ------------------------------------------------------------------ */
-/*  create, update, delete                                             */
-/* ------------------------------------------------------------------ */
-
 test("a product round-trips through create, list, update and delete", async () => {
   const created = await createProduct(agent, {
     productname: "Copier Paper",
@@ -85,10 +81,6 @@ test("a malformed id is a 422 and an unknown one a 404", async () => {
     .expect(404);
 });
 
-/* ------------------------------------------------------------------ */
-/*  money                                                              */
-/* ------------------------------------------------------------------ */
-
 test("prices are stored as whole paise, fractions truncated not rounded up", async () => {
   const created = await createProduct(agent, { unitprice: 100.9 });
   assert.equal(created.unitprice, 100);
@@ -100,11 +92,7 @@ test("a fractional quantity is truncated to whole units", async () => {
   assert.equal(created.availableproductqty, 7);
 });
 
-/* ------------------------------------------------------------------ */
-/*  paging                                                             */
-/* ------------------------------------------------------------------ */
-
-/** Twelve products, priced 100, 200 ... 1200 paise. */
+// 12 products priced 100, 200 ... 1200 paise
 async function seedTwelve() {
   for (let n = 1; n <= 12; n += 1) {
     await createProduct(agent, {
@@ -164,7 +152,7 @@ test("a page past the end is empty rather than an error", async () => {
   assert.equal(res.body.meta.total, 12);
 });
 
-test("limit is clamped so one request cannot ask for the whole database", async () => {
+test("limit is capped at 500", async () => {
   await seedTwelve();
   const res = await agent
     .get("/api/products")
@@ -172,10 +160,6 @@ test("limit is clamped so one request cannot ask for the whole database", async 
     .expect(200);
   assert.equal(res.body.meta.limit, 500);
 });
-
-/* ------------------------------------------------------------------ */
-/*  search and sort                                                    */
-/* ------------------------------------------------------------------ */
 
 test("search matches the name, case-insensitively", async () => {
   await createProduct(agent, { productname: "Blue Folder" });
@@ -206,7 +190,7 @@ test("search also matches the catalogue number", async () => {
 test("a search term full of regex punctuation is treated as text", async () => {
   await createProduct(agent, { productname: "Plain" });
 
-  // Unescaped, ".*" would match everything.
+  // ".*" would match everything if it was not escaped
   const res = await agent
     .get("/api/products")
     .query({ search: ".*" })
@@ -244,10 +228,6 @@ test("a column that is not on the allowlist falls back instead of erroring", asy
     .expect(200);
   assert.equal(res.body.data.length, 3);
 });
-
-/* ------------------------------------------------------------------ */
-/*  totals                                                             */
-/* ------------------------------------------------------------------ */
 
 test("stock totals cover the whole catalogue, not the page on screen", async () => {
   await seedTwelve();
@@ -293,7 +273,7 @@ test("the restock count covers the whole catalogue and follows the search", asyn
     await createProduct(agent, { productname, availableproductqty });
   }
 
-  // One row on the page, but the count is over all four products.
+  // one row on the page, count is for all 4 products
   const all = await agent.get("/api/products").query({ limit: 1 }).expect(200);
   assert.equal(all.body.data.length, 1);
   assert.equal(all.body.meta.lowStock, 2);

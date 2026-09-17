@@ -1,10 +1,6 @@
 const { Counter } = require("../models");
 
-/*
- * Hands out the next human-facing id for one user's collection.
- * findOneAndUpdate + $inc + upsert is atomic, so two concurrent creates can
- * never receive the same number.
- */
+// Next id for a user's products, customers or bills
 const nextCounterId = async (type, userId) => {
   if (!userId) throw new Error("nextCounterId needs a user id");
 

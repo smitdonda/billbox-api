@@ -6,17 +6,10 @@ const app = require("./src/app");
 const env = require("./src/config/env");
 const { connectDatabase } = require("./src/config/database");
 
-/*
- * The long-running entry point. On Vercel nothing runs this file: the platform
- * imports src/app.js and calls it per request, which is why the express app and
- * the server that listens with it are separate modules.
- */
-
-/** A port number, a named pipe, or false when the value makes no sense. */
 const normalizePort = (value) => {
-  const parsed = parseInt(value, 10);
-  if (Number.isNaN(parsed)) return value; // named pipe
-  return parsed >= 0 ? parsed : false;
+  const port = parseInt(value, 10);
+  if (Number.isNaN(port)) return value;
+  return port >= 0 ? port : false;
 };
 
 const port = normalizePort(env.port);
@@ -50,10 +43,7 @@ const onListening = () => {
   console.log(`Listening on ${bind}`);
 };
 
-/*
- * A long-running server has no reason to accept traffic it cannot serve, so
- * the database connection is proved before the socket opens.
- */
+// Connect to the database first, then start listening
 connectDatabase()
   .then(() => {
     console.log("****************************");

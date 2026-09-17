@@ -3,8 +3,6 @@ const { isPaise } = require("../utils/money");
 
 const ProductSchema = new mongoose.Schema(
   {
-    // Every record belongs to exactly one account. Nothing reads a product
-    // without filtering on this, so one user can never see another's stock.
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -21,8 +19,7 @@ const ProductSchema = new mongoose.Schema(
       default: 0,
       min: [0, "Stock cannot go below zero"],
     },
-    // Money is stored in paise as a whole number. Rupees as a float silently
-    // lose fractions of a paisa once totals are summed — see utils/money.js.
+    // price in paise
     unitprice: {
       type: Number,
       default: 0,

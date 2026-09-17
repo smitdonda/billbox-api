@@ -14,9 +14,7 @@ const UserSchema = new mongoose.Schema(
       unique: true,
       index: true,
     },
-    // Always a bcrypt hash. `select: false` keeps it out of every query that
-    // does not explicitly ask for it, so it cannot leak through a route that
-    // returns a user document.
+    // bcrypt hash, not returned unless asked for with select("+password")
     password: {
       type: String,
       required: true,
@@ -24,9 +22,6 @@ const UserSchema = new mongoose.Schema(
     },
   },
   {
-    // Named rather than derived. Mongoose pluralises the model name to reach a
-    // collection, so renaming a model would otherwise point it at an empty one
-    // and the data would look deleted.
     collection: "users",
     versionKey: false,
     timestamps: true,

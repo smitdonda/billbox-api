@@ -1,7 +1,6 @@
 const ApiError = require("../utils/ApiError");
 const { priceBill } = require("../utils/billing");
 
-/** Customer details on the bill are a snapshot, separate from line items. */
 const pickCustomer = (body = {}) => {
   const values = {};
 
@@ -13,11 +12,6 @@ const pickCustomer = (body = {}) => {
   return values;
 };
 
-/**
- * A bill as the server will store it: the customer snapshot plus line items
- * and a total recomputed from unit price and quantity. Nothing about the money
- * comes from the request — see utils/billing.js.
- */
 const parseBillBody = (body = {}) => {
   const { products, totalproductsprice } = priceBill(body);
 

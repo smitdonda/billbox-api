@@ -1,19 +1,8 @@
 const { toPaise, percentOf } = require("./money");
 const { isObjectId } = require("./objectId");
 
-/*
- * Pure bill arithmetic: what a line item costs and how many units of each
- * product a set of lines represents. Nothing here touches the database — the
- * stock writes that follow from these numbers live in services/stock.service.js.
- */
-
-/**
- * Recompute a line item from its inputs.
- *
- * Totals are never taken from the request body — a client that posts its own
- * `gsttex` could otherwise bill any amount it likes. Amounts in and out are
- * whole paise, so every value here stays an exact integer.
- */
+// Works out the line totals on the server. Totals sent by the client are
+// ignored. All amounts are in paise.
 const priceLine = (line = {}) => {
   const unitprice = toPaise(line.unitprice);
   const quantity = Math.max(0, Math.trunc(Number(line.quantity)) || 0);
@@ -42,7 +31,6 @@ const priceLine = (line = {}) => {
   };
 };
 
-/** Normalise a whole bill body: clean line items plus a trustworthy total. */
 const priceBill = (body = {}) => {
   const products = (Array.isArray(body.products) ? body.products : [])
     .map(priceLine)
@@ -56,7 +44,7 @@ const priceBill = (body = {}) => {
   return { products, totalproductsprice };
 };
 
-/** How many units each product must give up (negative = give back). */
+// Units to take from stock per product (negative means give back)
 const stockDelta = (before = new Map(), after = new Map()) => {
   const delta = new Map();
   const ids = new Set([...before.keys(), ...after.keys()]);

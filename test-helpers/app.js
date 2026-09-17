@@ -2,35 +2,19 @@ const { MongoMemoryServer } = require("mongodb-memory-server");
 const mongoose = require("mongoose");
 const request = require("supertest");
 
-/*
- * Boots the real Express app against a throwaway in-memory MongoDB.
- *
- * These are route tests, not unit tests: they go through the actual
- * middleware stack — CORS, the database gate, requireAuth, the error handler —
- * because that stack is where the interesting bugs live. Ownership scoping in
- * particular cannot be proved anywhere else: it is a property of what the
- * queries filter on, not of any function you can call in isolation.
- *
- * This directory sits outside test/ on purpose, so the runner does not try to
- * execute the helper as a test file.
- */
+// Starts the app against an in-memory MongoDB for the route tests.
+// Kept outside test/ so node --test does not run it as a test file.
 
-/** Every route the browser app talks to hangs off this prefix. */
 const API = "/api";
 
 let mongod = null;
 
-/** Boots a fresh database and returns the app wired to it. */
 async function startTestApp() {
   mongod = await MongoMemoryServer.create();
 
-  /*
-   * Set before requiring the app: config/env.js reads these at require time
-   * and exits the process without them. dotenv does not overwrite variables
-   * that are already set, so these win over whatever .env holds.
-   */
-  const throwawayUri = mongod.getUri("billbook-test");
-  process.env.MONGO_DB_URL = throwawayUri;
+  // env.js reads these when the app is required, so set them first
+  const testUri = mongod.getUri("billbook-test");
+  process.env.MONGO_DB_URL = testUri;
   process.env.JWT_SECRET = "test-only-secret-not-used-anywhere-real";
   process.env.NODE_ENV = "test";
   process.env.MONGO_SERVER_SELECTION_TIMEOUT_MS = "5000";
@@ -41,22 +25,17 @@ async function startTestApp() {
 
   const app = require("../src/app");
 
-  /*
-   * A test suite that quietly connected to the real cluster would delete a
-   * live shop's data on its first clearDatabase(). Refuse to go on unless the
-   * URL is still the throwaway one.
-   */
-  if (process.env.MONGO_DB_URL !== throwawayUri) {
+  // safety check so the tests never clear a real database
+  if (process.env.MONGO_DB_URL !== testUri) {
     throw new Error(
-      "Refusing to run: MONGO_DB_URL is not the in-memory server. " +
-        "Something overwrote it after startTestApp() set it."
+      "Refusing to run: MONGO_DB_URL is not the in-memory test database."
     );
   }
 
   const { connectDatabase } = require("../src/config/database");
   await connectDatabase();
 
-  // Unique indexes have to be built before a test can prove one bites.
+  // build the unique indexes before the tests run
   await Promise.all(
     Object.values(mongoose.models).map((model) => model.init())
   );
@@ -70,7 +49,6 @@ async function stopTestApp() {
   mongod = null;
 }
 
-/** Empties every collection, leaving the indexes in place. */
 async function clearDatabase() {
   const collections = await mongoose.connection.db.collections();
   await Promise.all(collections.map((collection) => collection.deleteMany({})));
@@ -78,11 +56,7 @@ async function clearDatabase() {
 
 const DEFAULT_PASSWORD = "Password1!";
 
-/**
- * A signed-in agent. supertest agents keep cookies between requests, which is
- * exactly what a browser does with the httpOnly session cookie — so this is
- * the real login path, not a hand-forged token.
- */
+// supertest agent keeps the session cookie like a browser does
 async function signIn(app, email, { username = "tester" } = {}) {
   const agent = request.agent(app);
 
@@ -99,7 +73,7 @@ async function signIn(app, email, { username = "tester" } = {}) {
   return agent;
 }
 
-/** Creates a product and returns the saved document. Prices are in paise. */
+// prices in paise
 async function createProduct(agent, values = {}) {
   const res = await agent
     .post(`${API}/products`)
@@ -114,7 +88,6 @@ async function createProduct(agent, values = {}) {
   return res.body.data;
 }
 
-/** One priced line item pointing at a product, ready to post to a bill. */
 function lineFor(
   product,
   quantity = 1,
@@ -130,7 +103,6 @@ function lineFor(
   };
 }
 
-/** Stock on hand for a product, straight from the database. */
 async function stockOf(agent, productId) {
   const res = await agent
     .get(`${API}/products`)

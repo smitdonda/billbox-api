@@ -3,14 +3,7 @@ const assert = require("node:assert/strict");
 
 const { priceLine, priceBill, stockDelta } = require("../src/utils/billing");
 
-/*
- * Every amount in these tests is in paise: ₹1,000.00 is 100000.
- * See utils/money.js for why.
- */
-
-/* ------------------------------------------------------------------ */
-/*  priceLine                                                          */
-/* ------------------------------------------------------------------ */
+// All amounts are in paise (100000 = Rs 1,000)
 
 test("priceLine applies each slab to the pre-tax subtotal", () => {
   const line = priceLine({
@@ -28,7 +21,7 @@ test("priceLine applies each slab to the pre-tax subtotal", () => {
     line.gst.map((slab) => slab.taxAmount),
     [17500, 17500]
   );
-  // Both slabs charge on the subtotal, never on each other.
+  // both slabs are calculated on the subtotal
   assert.equal(line.gsttex, 735000); // ₹7,350.00
 });
 
@@ -103,10 +96,6 @@ test("priceLine drops a productId that is not a valid ObjectId", () => {
   assert.equal(line.productId, undefined);
 });
 
-/* ------------------------------------------------------------------ */
-/*  priceBill                                                          */
-/* ------------------------------------------------------------------ */
-
 test("priceBill totals its lines and recomputes the bill total", () => {
   const { products, totalproductsprice } = priceBill({
     totalproductsprice: 1,
@@ -135,8 +124,7 @@ test("priceBill totals its lines and recomputes the bill total", () => {
 });
 
 test("priceBill stays exact across many small lines", () => {
-  // A hundred lines of ten paise each. In rupees this drifts; in paise it
-  // lands on exactly ₹10.00.
+  // 100 lines of 10 paise each
   const { totalproductsprice } = priceBill({
     products: Array.from({ length: 100 }, () => ({
       productname: "Sweet",
@@ -172,10 +160,6 @@ test("priceBill copes with a missing or non-array products field", () => {
   });
 });
 
-/* ------------------------------------------------------------------ */
-/*  stockDelta — the bug that drained stock twice on every edit         */
-/* ------------------------------------------------------------------ */
-
 const map = (entries) => new Map(entries);
 
 test("stockDelta on a new bill consumes the full quantity", () => {
@@ -184,12 +168,12 @@ test("stockDelta on a new bill consumes the full quantity", () => {
 });
 
 test("stockDelta on an edit moves only the difference", () => {
-  // 3 units already reserved, bill raised to 5 -> take 2 more, not 5.
+  // 3 -> 5: take 2 more
   assert.deepEqual(
     [...stockDelta(map([["a", 3]]), map([["a", 5]]))],
     [["a", 2]]
   );
-  // Lowered to 1 -> give 2 back.
+  // 3 -> 1: give 2 back
   assert.deepEqual(
     [...stockDelta(map([["a", 3]]), map([["a", 1]]))],
     [["a", -2]]

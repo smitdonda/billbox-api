@@ -1,6 +1,5 @@
 const ApiError = require("../utils/ApiError");
 
-/** Only these fields are writable; `id` and `user` are owned by the server. */
 const pick = (body = {}) => {
   const values = {};
 
@@ -12,11 +11,7 @@ const pick = (body = {}) => {
   return values;
 };
 
-/**
- * @param {object} body The request body.
- * @param {{ partial?: boolean }} options `partial` is an edit, where an
- *   omitted field means "leave it alone" rather than "clear it".
- */
+// partial: true for updates, where missing fields are left unchanged
 const parseCustomerBody = (body, { partial = false } = {}) => {
   const values = pick(body);
 

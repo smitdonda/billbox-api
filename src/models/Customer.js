@@ -18,8 +18,7 @@ const CustomerSchema = new mongoose.Schema(
       lowercase: true,
       trim: true,
     },
-    // String, not Number: phone numbers are identifiers, not quantities, and
-    // a leading zero must survive the round trip.
+    // string so a leading zero is kept
     phoneNo: {
       type: String,
       trim: true,

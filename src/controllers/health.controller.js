@@ -2,20 +2,11 @@ const { connectDatabase, isConnected } = require("../config/database");
 const env = require("../config/env");
 const { sendSuccess } = require("../utils/apiResponse");
 
-/*
- * Liveness and readiness in one place, answered before the database gate so a
- * broken database is reported rather than hidden behind the gate's generic
- * "unavailable".
- *
- * It connects rather than reading the connection state, because on a cold
- * serverless instance nothing has connected yet: a passive readyState check
- * answers "disconnected" for a perfectly healthy deployment, and flaps
- * depending on which instance happens to take the request.
- */
 const healthz = async (req, res) => {
   const started = Date.now();
 
   try {
+    // actually connect, a cold serverless instance has no connection yet
     await connectDatabase();
 
     return sendSuccess(res, {

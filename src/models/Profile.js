@@ -1,9 +1,6 @@
 const mongoose = require("mongoose");
 
-/*
- * The company letterhead printed on invoices. Exactly one per account, which
- * the unique index on `user` enforces rather than leaving it to the route.
- */
+// Company details printed on the invoice, one per user
 const ProfileSchema = new mongoose.Schema(
   {
     user: {
@@ -19,17 +16,11 @@ const ProfileSchema = new mongoose.Schema(
     city: { type: String, trim: true },
     state: { type: String, trim: true },
     country: { type: String, trim: true },
-    // Identifiers, not quantities — keep them as text.
     pinno: { type: String, trim: true },
     phone: { type: String, trim: true },
   },
   {
-    /*
-     * The model used to be registered as "myprofile", which mongoose
-     * pluralised into this collection. The model has a proper name now; the
-     * collection keeps the old one, because renaming it here would point a
-     * deployed database at an empty collection and read as lost data.
-     */
+    // old collection name from the "myprofile" model, keep it for existing data
     collection: "myprofiles",
     versionKey: false,
     timestamps: true,

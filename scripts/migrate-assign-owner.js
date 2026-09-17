@@ -1,16 +1,7 @@
-/*
- * Backfills the `user` field that products, customers, bills and the company
- * profile now require.
- *
- * Before this change every signed-in account could read and delete every other
- * account's records, because nothing was owned by anyone. Existing data has no
- * owner recorded anywhere, so one has to be named:
- *
- *   npm run migrate:owner -- owner@example.com
- *
- * Everything ownerless is assigned to that account. Run it once, before
- * anybody else signs up.
- */
+// Gives all old records (without a user) to one account and sets up the
+// per-user counters.
+// Run: npm run migrate:owner -- owner@example.com
+
 const { run } = require("./_lib");
 
 const User = require("../src/models/User");
@@ -51,11 +42,7 @@ run("2026-09-assign-owner", async (connection) => {
     assigned[label] = result.modifiedCount;
   }
 
-  /*
-   * The profile is one-per-account now. If the old data somehow grew a second
-   * document, only the first can be kept — the rest were unreachable anyway,
-   * since the app has only ever read profile[0].
-   */
+  // Only one profile per user is allowed, so only the first one is assigned
   const profiles = await Profile.collection
     .find({ user: { $exists: false } })
     .sort({ _id: 1 })
@@ -69,42 +56,29 @@ run("2026-09-assign-owner", async (connection) => {
     assigned.profile = 1;
 
     if (profiles.length > 1) {
-      const stranded = profiles.slice(1).map((doc) => String(doc._id));
+      const extra = profiles.slice(1).map((doc) => String(doc._id));
       console.warn(
-        `Left ${stranded.length} extra company profile(s) unowned — the app ` +
-          `only ever read the first. Delete them by hand if they are junk: ` +
-          stranded.join(", ")
+        `${extra.length} extra company profile(s) were left without an owner. ` +
+          `Delete them by hand if not needed: ${extra.join(", ")}`
       );
     }
   }
 
-  // What the old global counters had handed out, read before they are removed.
   const previousSeq = new Map(
     (await Counter.collection.find({ user: { $exists: false } }).toArray()).map(
       (doc) => [doc.type, doc.seq || 0]
     )
   );
 
-  /*
-   * The old counters were unique on `type` alone. That index has to go before
-   * a per-user counter is written, or inserting {user, type: "Product"}
-   * collides with the global {type: "Product"} still sitting there.
-   */
+  // The old unique index on `type` alone would block per-user counters
   try {
     await Counter.collection.dropIndex("type_1");
   } catch (error) {
-    // IndexNotFound (27) — a fresh database, or the script ran before.
+    // 27 = index not found
     if (error.code !== 27) throw error;
   }
 
-  /*
-   * Counters were global and are now per account.
-   *
-   * Each one carries on from whichever is higher: the largest id still in use,
-   * or where the old global counter had got to. Taking only the former would
-   * step back over numbers freed by deleted records — and an invoice number
-   * that gets issued twice is not a number anyone can rely on.
-   */
+  // Continue each counter from the highest id in use or the old counter value
   const counters = {};
   for (const [, Model, counterType] of OWNED) {
     const [highest] = await Model.collection
@@ -122,31 +96,19 @@ run("2026-09-assign-owner", async (connection) => {
     counters[counterType] = seq;
   }
 
-  // The old global counters keyed only by `type` are dead weight now.
   const removed = await Counter.collection.deleteMany({
     user: { $exists: false },
   });
 
-  /*
-   * Finally bring the indexes in line with the schemas: the new compound
-   * {user, id} uniques have to exist, and syncIndexes drops whatever the
-   * schema no longer declares.
-   */
   const indexed = [];
   const models = [Product, Customer, BillInfo, Counter];
 
-  /*
-   * The profile index is unique on `user`, and a document with no `user` is
-   * indexed as null — so two stranded profiles would collide on null and the
-   * build would fail. Leave the index alone until they are dealt with, rather
-   * than deleting someone's data to make an index fit.
-   */
-  const strandedProfiles = Math.max(0, profiles.length - 1);
-  if (strandedProfiles) {
+  // The unique index on Profile.user fails while extra profiles have no user
+  const extraProfiles = Math.max(0, profiles.length - 1);
+  if (extraProfiles) {
     console.warn(
-      `Skipping the company-profile index: ${strandedProfiles} extra ` +
-        `profile(s) have no owner. Remove them, then run this again with ` +
-        `--force to finish.`
+      `Skipping the company profile index: ${extraProfiles} profile(s) ` +
+        `have no owner. Remove them, then run this again with --force.`
     );
   } else {
     models.push(Profile);
@@ -163,7 +125,7 @@ run("2026-09-assign-owner", async (connection) => {
     counters,
     oldCountersRemoved: removed.deletedCount,
     reindexed: indexed,
-    ...(strandedProfiles ? { strandedProfiles } : {}),
+    ...(extraProfiles ? { extraProfiles } : {}),
     database: connection.name,
   };
 });

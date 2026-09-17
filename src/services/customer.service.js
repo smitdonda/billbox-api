@@ -11,8 +11,6 @@ const { nextCounterId } = require("./counter.service");
 const SORTABLE = ["name", "email", "id", "createdAt", "updatedAt"];
 const SEARCHABLE = ["name", "email", "phoneNo", "gstNo"];
 
-// Customer data is business data — every query is scoped to one account's own
-// records.
 const ownedBy = (userId, search) => ({
   user: userId,
   ...(searchFilter(search, SEARCHABLE) || {}),
@@ -22,9 +20,6 @@ const listCustomers = async ({ userId, query = {} }) => {
   const { page, limit, skip } = parsePaging(query);
   const filter = ownedBy(userId, query.search);
 
-  /* The GST-registered count is over everything the filter matches, like the
-     total beside it. A cleared GST number is stored as "", so that counts as
-     unregistered along with a missing one. */
   const [customers, total, gstRegistered] = await Promise.all([
     Customer.find(filter)
       .sort(parseSort(query, SORTABLE))
@@ -32,6 +27,7 @@ const listCustomers = async ({ userId, query = {} }) => {
       .limit(limit)
       .lean(),
     Customer.countDocuments(filter),
+    // an empty gstNo counts as not registered
     Customer.countDocuments({ ...filter, gstNo: { $nin: [null, ""] } }),
   ]);
 

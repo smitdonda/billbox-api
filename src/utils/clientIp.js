@@ -1,11 +1,5 @@
-/**
- * The caller's address.
- *
- * Vercel sets `x-real-ip` itself at the edge, so prefer it;
- * `x-forwarded-for` is a client-supplied header everywhere else and only its
- * first entry is worth reading.
- */
 const clientIp = (req) => {
+  // set by Vercel
   const real = req.headers["x-real-ip"];
   if (real) return String(real).trim();
 

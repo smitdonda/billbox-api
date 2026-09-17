@@ -1,24 +1,11 @@
-/*
- * Converts every stored money value from floating-point rupees to a whole
- * number of paise.
- *
- *   npm run migrate:money
- *
- * Take a backup first. This rewrites amounts in place, and running it twice
- * would multiply every price by a hundred again — which is why it records
- * itself in the `migrations` collection and refuses a second run.
- *
- * The arithmetic happens inside MongoDB as a pipeline update, so nothing has
- * to be pulled into this process and no document is read-modify-written while
- * the app might be touching it. $round returns a double holding an integral
- * value, which is exactly what the schema validators accept.
- */
+// Converts stored prices from rupees to paise.
+// Take a backup first, then run: npm run migrate:money
+
 const { run } = require("./_lib");
 
 const Product = require("../src/models/Product");
 const BillInfo = require("../src/models/BillInfo");
 
-/** rupees -> paise, rounded to the nearest whole paisa. */
 const toPaise = (field) => ({
   $round: [{ $multiply: [{ $ifNull: [field, 0] }, 100] }, 0],
 });
